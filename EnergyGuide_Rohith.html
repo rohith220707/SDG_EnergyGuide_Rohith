@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="An offline household energy chatbot by Rohith.">
+<title>Energy Guide | Rohith</title>
+<style>
+:root{font-family:"Segoe UI",system-ui,sans-serif;color:#142a25;background:#eaf2ed;line-height:1.45;--ink:#142a25;--accent:#175942;--line:#c9dcd0;--muted:#496259;--soft:#edf5ef}
+*{box-sizing:border-box}body{margin:0}p,h1,h2,h3{margin:0}button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,section[tabindex]:focus-visible{outline:3px solid #1c7755;outline-offset:3px}
+main{max-width:1110px;margin:auto;padding:28px 22px}.banner{background:#163e32;color:#fff;padding:23px 28px;border-radius:15px;margin-bottom:17px}.goal{color:#b9e4cd;font-size:.89rem;font-weight:700}.banner h1{font-size:clamp(2.15rem,5vw,3.2rem);letter-spacing:-.06em;line-height:1.05;margin:4px 0 7px}.banner p:last-child{color:#f1f9f4}
+.layout{display:grid;grid-template-columns:minmax(0,1.83fr) minmax(265px,1fr);gap:16px;align-items:start}.card{background:white;border:1px solid var(--line);border-radius:13px;overflow:hidden}.chat-head{padding:13px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;border-bottom:1px solid var(--line)}
+h2{font-size:1.14rem;letter-spacing:-.024em}h3{font-size:.91rem}.chat-head button,.chip{border:1px solid var(--line);color:var(--accent);border-radius:8px;background:var(--soft);padding:6px 9px;font-weight:660;font-size:.85rem}
+.chat{height:clamp(340px,56vh,560px);overflow:auto;padding:15px 16px;display:flex;flex-direction:column;gap:10px;background:#f9fcfa}.turn{width:fit-content;max-width:93%;flex:none}.turn small{display:block;color:var(--muted);font-size:.73rem;font-weight:700;margin:0 0 3px}.turn p{padding:8px 11px;border-radius:4px 11px 11px;background:#e5f0e9;font-size:.91rem;white-space:pre-wrap;overflow-wrap:anywhere}.user{align-self:flex-end}.user small{text-align:right}.user p{background:var(--accent);color:white;border-radius:11px 4px 11px 11px}
+.entry{padding:11px 16px 14px;border-top:1px solid var(--line)}.chips{display:flex;flex-wrap:wrap;gap:5px;margin:7px 0 10px}.chip{font-size:.8rem;padding:5px 8px}form{display:flex;gap:7px}input{padding:8px 10px;flex:1;min-width:0;border:1px solid #94aea0;border-radius:7px;color:var(--ink)}.send{padding:6px 13px;background:var(--accent);color:white;border:1px solid transparent;border-radius:7px;font-weight:700}
+.flow{padding:16px}.flow>p{font-size:.86rem;color:var(--muted);margin-top:4px}.flow ol{list-style:none;margin:12px 0;padding:0}.flow li{border-left:3px solid #a0c7b1;background:var(--soft);margin-bottom:6px;padding:7px 9px;border-radius:0 7px 7px 0;font-size:.85rem}.flow li b{display:block;color:var(--accent)}.state{border-top:1px solid var(--line);padding-top:10px;color:var(--muted);font-size:.86rem}.state strong{color:var(--ink)}
+@media(max-width:760px){main{padding:12px}.layout{grid-template-columns:1fr}.banner{padding:16px 18px}.chat{height:clamp(260px,49vh,455px);padding:12px}.chat-head,.entry{padding-left:11px;padding-right:11px}}
+</style>
+</head>
+<body>
+<main>
+ <header class="banner"><p class="goal">SDG 7 · Affordable and Clean Energy</p><h1>Energy Guide</h1><p>Household electricity tips and appliance energy estimates · Rohith</p></header>
+ <div class="layout">
+  <section class="card" aria-labelledby="chat-title">
+   <header class="chat-head"><h2 id="chat-title">Ask Energy Guide</h2><button id="reset" type="button">New chat</button></header>
+   <section class="chat" id="chat" role="log" aria-label="Conversation" tabindex="0"></section>
+   <div class="entry">
+    <h3>Suggested questions</h3><div id="chips" class="chips"></div>
+    <form id="form"><input id="question" aria-label="Your question" placeholder="Type an energy question…" maxlength="240" required autocomplete="off"><button class="send">Send</button></form>
+   </div>
+  </section>
+  <aside class="card flow" aria-labelledby="flow-title">
+   <h2 id="flow-title">Conversation flow</h2>
+   <p>The topic classifier and calculator run in your browser.</p>
+   <ol>
+    <li><b>Welcome</b>Offer five prompts and accept a typed question.</li>
+    <li><b>Identify the topic</b>Compare the message with labelled examples.</li>
+    <li><b>Give an energy tip</b>Return advice about lighting, standby power, cooling or laundry.</li>
+    <li><b>Estimate electricity use</b>Ask for watts and hours per day, then show daily and 30-day kWh.</li>
+    <li><b>Recover from unclear input</b>Offer supported topics or repeat the missing calculator prompt.</li>
+   </ol>
+   <div class="state"><strong>Current step</strong><br><span id="state" aria-live="polite">Ready for a question</span></div>
+  </aside>
+ </div>
+</main>
+<script>
+"use strict";
+const topics = [
+  {id:"lighting", label:"Lighting", examples:[
+    "switch to led bulbs","save electricity with lights","replace incandescent lamp","what brightness lumens","efficient lighting options"
+  ], reply:"When a bulb needs replacing, compare LED options with the same brightness in lumens. Pick a suitable bulb with lower wattage and switch off lights when you leave a room."},
+  {id:"standby", label:"Standby power", examples:[
+    "television uses power when off","phantom load from my tv","what is standby electricity","idle game console","should i unplug unused devices"
+  ], reply:"Some TVs and game consoles still draw power in standby. Turn off optional quick-start modes or use a switched power strip for compatible equipment you can safely power down."},
+  {id:"cooling", label:"Cooling", examples:[
+    "lower air conditioning use","save energy with my ac","keep my room cool","ceiling fan for cooling","reduce electricity from air conditioner"
+  ], reply:"Close blinds against direct sun and set the AC as warm as you can comfortably tolerate. A fan can help people feel cooler while they are in the room. Turn it off after you leave."},
+  {id:"laundry", label:"Laundry", examples:[
+    "wash clothes in cold water","save energy washing machine","reduce laundry power use","when should i run washer","air dry my clothes"
+  ], reply:"Use a full load and a cooler wash when the care label allows. Air-dry clothes when practical. Check the washer manual for the right programme for your load."},
+  {id:"estimate", label:"Estimate appliance use", examples:[
+    "calculate energy consumption","how many kwh does my appliance use","estimate fan electricity usage","calculate monthly electricity use","power watts hours per day"
+  ]}
+];
+const stop = new Set("a an the how can should does do my i of for from with to in a is on you we by what are and am more when".split(" "));
+function terms(message) {
+  return new Set((message.toLowerCase().match(/[a-z]+/g) || [])
+    .filter(word => !stop.has(word))
+    .map(word => word.length > 4 && word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word));
+}
+const examples = topics.map(topic => [topic.label, ...topic.examples].map(terms));
+function classify(message) {
+  const input = terms(message);
+  if (!input.size) return "unknown";
+  const scores = examples.map((samples, index) => ({
+    topic: topics[index],
+    score: Math.max(...samples.map(sample =>
+      [...input].filter(word => sample.has(word)).length / Math.sqrt(input.size * sample.size)))
+  })).sort((a,b) => b.score - a.score);
+  if (scores[0].score < 0.38) return "unknown";
+  if (scores[0].score - scores[1].score < 0.10) return "ambiguous";
+  return scores[0].topic;
+}
+const get = id => document.getElementById(id);
+const chat = get("chat");
+const field = get("question");
+const wattPrompt = "What is the appliance power in watts? Enter a value greater than 0 and up to 5,000 W, for example 75 W. Type cancel to leave the estimate.";
+const hourPrompt = "How many hours per day does it run? Enter a number from 0 to 24, for example 6 or 2.5 hours.";
+const welcome = "Hi, I’m Energy Guide. Ask about lighting, standby power, cooling or laundry. I can also estimate how much electricity an appliance uses.";
+const format = new Intl.NumberFormat("en", {maximumFractionDigits:4});
+let step = "ready", watts = 0;
+function setStep(next) {
+  step = next;
+  get("state").textContent = {ready:"Ready for a question", watts:"Waiting for watts", hours:"Waiting for hours per day"}[next];
+}
+function turn(speaker, message, user = false) {
+  const row = document.createElement("div");
+  row.className = user ? "turn user" : "turn";
+  const name = document.createElement("small");
+  name.textContent = speaker;
+  const copy = document.createElement("p");
+  copy.textContent = message;
+  row.append(name, copy);
+  chat.append(row);
+  chat.scrollTop = chat.scrollHeight;
+}
+function answer(message, chosen) {
+  if (chosen) setStep("ready");
+  if (/^cancel[.!]?$/i.test(message) && step !== "ready") {
+    setStep("ready");
+    return "Estimate cancelled. You can choose another energy topic below.";
+  }
+  if (step === "watts") {
+    const found = message.match(/^(\d+(?:\.\d+)?|\.\d+)\s*(?:w|watts?)?$/i);
+    const value = found ? Number(found[1]) : NaN;
+    if (!Number.isFinite(value) || value <= 0 || value > 5000) return "I need a power value from above 0 to 5,000 W. Try 75 W, or type cancel.";
+    watts = value;
+    setStep("hours");
+    return hourPrompt;
+  }
+  if (step === "hours") {
+    const found = message.match(/^(\d+(?:\.\d+)?|\.\d+)\s*(?:h|hrs?|hours?)?(?:\s*(?:\/\s*day|per day))?$/i);
+    const value = found ? Number(found[1]) : NaN;
+    if (!Number.isFinite(value) || value < 0 || value > 24) return "Daily runtime must be 0 to 24 hours. Try 6 hours, or type cancel.";
+    const daily = watts * value / 1000;
+    const show = amount => amount > 0 && amount < 0.0001 ? "<0.0001" : format.format(amount);
+    setStep("ready");
+    return "Estimated use: " + show(daily) + " kWh per day and " + show(daily * 30) +
+      " kWh over 30 days.\nCalculation: (" + format.format(watts) + " W ÷ 1,000) × " + format.format(value) +
+      " h/day. This assumes constant power and the same daily runtime.";
+  }
+  const topic = chosen || classify(message);
+  if (topic === "unknown") return "I couldn’t match that question. Try lighting, standby power, cooling, laundry, or an appliance-use estimate.";
+  if (topic === "ambiguous") return "That could match more than one topic. Ask about one energy topic at a time or select a suggested question.";
+  if (topic.id === "estimate") {
+    setStep("watts");
+    return wattPrompt;
+  }
+  return topic.reply;
+}
+function send(message, chosen) {
+  message = message.trim();
+  if (!message) return;
+  turn("You", message, true);
+  turn("Energy Guide", answer(message, chosen));
+  field.value = "";
+}
+function reset() {
+  setStep("ready");
+  watts = 0;
+  chat.replaceChildren();
+  field.value = "";
+  turn("Energy Guide", welcome);
+}
+for (const topic of topics) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "chip";
+  button.textContent = topic.label;
+  button.addEventListener("click", () => { send(topic.label, topic); field.focus(); });
+  get("chips").append(button);
+}
+get("form").addEventListener("submit", event => { event.preventDefault(); send(field.value); });
+get("reset").addEventListener("click", () => { reset(); field.focus(); });
+reset();
+</script>
+</body>
+</html>
